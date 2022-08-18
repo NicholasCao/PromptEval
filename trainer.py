@@ -140,15 +140,29 @@ class PromptTrainer:
                     'lr': self.config.lr
                 }
             ]
+            # for warp SoftVerbalizer
+            # The parameters of these part should be optimized (or freezed) together with the plm.
+            if hasattr(model.verbalizer, 'group_parameters_1'):
+                optimizer_grouped_parameters.append({
+                    'params': model.verbalizer.group_parameters_1,
+                    'lr': self.config.prompt_lr if self.config.prompt_lr else self.config.lr
+                })
         else:
             optimizer_grouped_parameters = []
         
-        optimizer_grouped_parameters.append(
-            {
-                'params': [p for name, p in model.template.named_parameters() if 'raw_embedding' not in name],
-                'lr': self.config.prompt_lr if self.config.prompt_lr else self.config.lr
-            }
-        ) # note that you have to remove the raw_embedding manually from the optimization
+        optimizer_grouped_parameters.append({
+            'params': [p for name, p in model.template.named_parameters() if 'raw_embedding' not in name],
+            'lr': self.config.prompt_lr if self.config.prompt_lr else self.config.lr
+        }) # note that you have to remove the raw_embedding manually from the optimization
+
+        # for warp SoftVerbalizer
+        if hasattr(model.verbalizer, 'group_parameters_2'):
+            optimizer_grouped_parameters.append(
+                {
+                    'params': model.verbalizer.group_parameters_2,
+                    'lr': self.config.lr
+                }
+            )
 
         self.optimizer = AdamW(optimizer_grouped_parameters, lr=self.config.lr)
 

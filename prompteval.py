@@ -1,42 +1,23 @@
-# Copyright (c) 2017-present, Facebook, Inc.
-# All rights reserved.
-#
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-#
-
 '''
 
 Generic prompt evaluation scripts wrapper
 
 '''
-import dataclasses
-# from dataclasses import dataclass
-import json
-import string
-from tqdm import tqdm
-from openprompt.data_utils import PROCESSORS
-import torch
-from openprompt.data_utils.utils import InputExample
-import argparse
-import numpy as np
-
-from openprompt import PromptDataLoader, Template, Verbalizer
-from openprompt import PromptForClassification
-from openprompt.plms import load_plm
-from openprompt.prompts import MixedTemplate, SoftTemplate, ManualVerbalizer
-
-from transformers import PreTrainedModel, PretrainedConfig, PreTrainedTokenizer, EarlyStoppingCallback
-from openprompt.data_utils.data_sampler import FewShotSampler
-from openprompt.trainer import ClassificationRunner
-
-import time
 import os
-
-from transformers import BertConfig, TrainingArguments
+import dataclasses
+import json
+import torch
 import logging
+from typing import *
 
-# [INFO|trainer.py:358] 2022-08-17 10:21:30,881 >>
+from openprompt import PromptDataLoader, Template, Verbalizer, PromptForClassification
+from openprompt.plms import load_plm
+from openprompt.prompts import MixedTemplate, SoftTemplate, ManualVerbalizer, SoftVerbalizer
+from openprompt.data_utils.data_sampler import FewShotSampler
+
+from data import load_data
+from trainer import PromptTrainer
+
 logging.basicConfig(
     format="[%(levelname)s|%(name)s] %(asctime)s >> %(message)s",
     # datefmt="%m/%d/%Y %H:%M:%S",
@@ -50,6 +31,10 @@ task_mix_templates = {
     'cb': '{"placeholder": "text_a"} {"soft": "Question:"} {"placeholder": "text_b"}? Is it correct? {"mask"}.',
 }
 
+task_soft_templates = {
+    'sst2': '{"placeholder": "text_a"} It was {"mask"}.',
+}
+
 task_verbalizers = {
     'sst2': {
         "negative": "terrible",
@@ -59,10 +44,13 @@ task_verbalizers = {
     }
 }
 
-from typing import *
+def save_results(results, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
 
-from data import load_data
-from trainer import PromptTrainer
+    json_path = os.path.join(output_dir, "result.json")
+    json_string = json.dumps(results, indent=2, sort_keys=True) + "\n"
+    with open(json_path, "w", encoding="utf-8") as f:
+        f.write(json_string)
 
 @dataclasses.dataclass
 class PromptEvalConfig:
@@ -84,7 +72,7 @@ class PromptEvalConfig:
     # train config
     optimizer: str = 'adamw'
     warmup_steps: int = 0
-    warmup_ratio: float = 0.1
+    warmup_ratio: float = 0
     log_steps: int = 10
     eval_steps: int = 20
     max_steps: Optional[int] = None
@@ -113,14 +101,6 @@ class PromptEvalConfig:
         json_string = json.dumps(dataclasses.asdict(self), indent=2, sort_keys=True) + "\n"
         with open(json_path, "w", encoding="utf-8") as f:
             f.write(json_string)
-    # @property
-    # def device(self):
-    #     return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-    # @property
-    # def output_dir(self):
-    #     return f'{self.output_dir}/{self.method}/{self.task}'
-
 
 class PromptEval:
     def __init__(self,
@@ -203,11 +183,18 @@ class PromptEval:
     def get_template(self, template_text: Optional[str]=None) -> Template:
         method, task = self.config.method, self.config.task
 
-        if method in ['mix_tuning', 'mix_template']:
+        if method in ['mix_tuning', 'warp']:
             template = MixedTemplate(
                 model=self.plm,
                 tokenizer=self.tokenizer,
                 text=template_text if template_text is not None else task_mix_templates[task])
+        elif method == 'prompt_tuning':
+            template = SoftTemplate(
+                model=self.plm,
+                tokenizer=self.tokenizer,
+                num_tokens=20,
+                initialize_from_vocab=True,
+                text=template_text if template_text is not None else task_soft_templates[task])
         else:
             raise NotImplementedError
 
@@ -216,14 +203,31 @@ class PromptEval:
     def get_verbalizer(self, verbalizer: Optional[dict]=None) -> Verbalizer:
         method, task = self.config.method, self.config.task
 
-        if method in ['mix_tuning', 'mix_template']:
+        task_classes = {
+            'sst2': ['negative', 'positive']
+        }
+
+        if method in ['mix_tuning', 'prompt_tuning']:
             verbalizer = ManualVerbalizer(
                 tokenizer=self.tokenizer,
-                num_classes=2, #len(self.processor.get_labels()),
-                classes=['negative', 'positive'],
+                classes=task_classes[self.config.task],
+                label_words=verbalizer if verbalizer is not None else task_verbalizers[task])
+        elif method == 'warp':
+            verbalizer = SoftVerbalizer(
+                tokenizer=self.tokenizer,
+                model=self.plm,
+                classes=task_classes[self.config.task],
                 label_words=verbalizer if verbalizer is not None else task_verbalizers[task])
         else:
             raise NotImplementedError
+
+        # if method not in Verbalizers:
+        #     raise NotImplementedError
+
+        # verbalizer = Verbalizers[method](
+        #     tokenizer=self.tokenizer,
+        #     classes=['negative', 'positive'],
+        #     label_words=verbalizer if verbalizer is not None else task_verbalizers[task])
 
         return verbalizer
 
@@ -237,22 +241,22 @@ class PromptEval:
         return results
     
     def run(self):
+        results_to_save = {}
         if self.config.zero_shot:
-            logger.info("------------------\n")
             logger.info("Zero-Shot Results:")
             results = self.eval(self.test_dataloader)
             logger.info(results)
-            logger.info("")
-            logger.info("------------------\n")
+            results_to_save["Zero-Shot Results"] = results
 
-        if not self.config.do_train:
-            return results
-        
-        self.train()
-        
-        logger.info("Test Results:")
-        results = self.eval(self.test_dataloader)
-        logger.info(results)
+        if self.config.do_train:
+            self.train()
+            
+            logger.info("Test Results:")
+            results = self.eval(self.test_dataloader)
+            logger.info(results)
+            results_to_save["Test Results"] = results
+
+        save_results(results_to_save, self.config.output_dir)
 
         return results
 
