@@ -12,8 +12,9 @@ from typing import *
 
 from openprompt import PromptDataLoader, Template, Verbalizer, PromptForClassification
 from openprompt.plms import load_plm
-from openprompt.prompts import MixedTemplate, SoftTemplate, ManualVerbalizer, SoftVerbalizer
+from openprompt.prompts import ManualTemplate, MixedTemplate, SoftTemplate, PtuningTemplate, ManualVerbalizer, SoftVerbalizer
 from openprompt.data_utils.data_sampler import FewShotSampler
+from openprompt.utils.reproduciblity import set_seed
 
 from data import load_data
 from trainer import PromptTrainer
@@ -25,15 +26,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+task_manual_templates = {
+    'sst2': '{"placeholder": "text_a"} It was {"mask"} .',
+}
 
 task_mix_templates = {
-    'sst2': '{"placeholder": "text_a"} {"soft": "It was"} {"mask"}.',
-    'cb': '{"placeholder": "text_a"} {"soft": "Question:"} {"placeholder": "text_b"}? Is it correct? {"mask"}.',
+    'sst2': '{"placeholder": "text_a"} {"soft": "It was"} {"mask"} .',
+    'cb': '{"placeholder": "text_a"} {"soft": "Question:"} {"placeholder": "text_b"}? Is it correct? {"mask"} .',
 }
 
 task_soft_templates = {
-    'sst2': '{"placeholder": "text_a"} It was {"mask"}.',
+    'sst2': '{"placeholder": "text_a"} It was {"mask"} .',
 }
+
+task_ptuning_templates = {
+    'sst2': '{"placeholder": "text_a"} {"soft"} It was {"mask"} .',
+}
+
+# https://github.com/THUDM/P-tuning/blob/main/PT-Fewshot/data_utils/task_pvps.py
 
 task_verbalizers = {
     'sst2': {
@@ -54,7 +64,7 @@ def save_results(results, output_dir):
 
 @dataclasses.dataclass
 class PromptEvalConfig:
-    method: str = 'mix_tuning'
+    method: str = 'prompt_tuning'
     model: str = 'bert'
     model_name_or_path: str = 'bert-base-uncased'
     seed: int = 42
@@ -73,7 +83,7 @@ class PromptEvalConfig:
     optimizer: str = 'adamw'
     warmup_steps: int = 0
     warmup_ratio: float = 0
-    log_steps: int = 10
+    log_steps: int = 20
     eval_steps: int = 20
     max_steps: Optional[int] = None
     num_train_epochs: int = 10
@@ -117,7 +127,6 @@ class PromptEval:
         self.model_config = model_config
         self.WrapperClass = WrapperClass # TODO
 
-        from openprompt.utils.reproduciblity import set_seed
         set_seed(self.config.seed)
 
         if self.config.task in ['sst2', 'cb']: # test split can not be evaluated
@@ -127,9 +136,6 @@ class PromptEval:
 
         if not self.config.do_train:
             splits = splits[-1:]
-
-        # self.dataset, self.processor = load_data(self.config.task, splits=splits)
-        # self.dataset = load_data(self.config.task, splits=splits)
 
         if template is not None:
             if isinstance(template, Template):
@@ -183,7 +189,11 @@ class PromptEval:
     def get_template(self, template_text: Optional[str]=None) -> Template:
         method, task = self.config.method, self.config.task
 
-        if method in ['mix_tuning', 'warp']:
+        if method == 'manual':
+            template = ManualTemplate(
+                tokenizer=self.tokenizer,
+                text=template_text if template_text is not None else task_manual_templates[task])
+        elif method == 'warp':
             template = MixedTemplate(
                 model=self.plm,
                 tokenizer=self.tokenizer,
@@ -195,6 +205,12 @@ class PromptEval:
                 num_tokens=20,
                 initialize_from_vocab=True,
                 text=template_text if template_text is not None else task_soft_templates[task])
+        elif method == 'p_tuning':
+            template = PtuningTemplate(
+                model=self.plm,
+                tokenizer=self.tokenizer,
+                prompt_encoder_type="lstm",
+                text=template_text if template_text is not None else task_ptuning_templates[task])
         else:
             raise NotImplementedError
 
@@ -207,7 +223,7 @@ class PromptEval:
             'sst2': ['negative', 'positive']
         }
 
-        if method in ['mix_tuning', 'prompt_tuning']:
+        if method in ['manual', 'prompt_tuning', 'p_tuning']:
             verbalizer = ManualVerbalizer(
                 tokenizer=self.tokenizer,
                 classes=task_classes[self.config.task],
