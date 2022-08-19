@@ -121,13 +121,14 @@ class PromptEval:
         self.config = config
         self.config.save_to_json()
 
+        set_seed(self.config.seed)
+
         plm, tokenizer, model_config, WrapperClass = load_plm(self.config.model, self.config.model_name_or_path)
         self.plm = plm
         self.tokenizer = tokenizer
         self.model_config = model_config
         self.WrapperClass = WrapperClass # TODO
 
-        set_seed(self.config.seed)
 
         if self.config.task in ['sst2', 'cb']: # test split can not be evaluated
             splits = ['train', 'validation']

@@ -1,0 +1,21 @@
+python ft.py \
+    --method fine_tuning \
+    --model roberta \
+    --model_name_or_path roberta-large \
+    --seed 42 \
+    --task sst2 \
+    --do_train True \
+    --shot 16 \
+    --metric_for_best_model acc \
+    --output_dir result \
+    --optimizer adamw \
+    --log_steps 20 \
+    --eval_steps 40 \
+    --warmup_steps 0 \
+    --max_steps 800 \
+    --lr 1e-5 \
+    --train_batch_size 2 \
+    --eval_batch_size 16 \
+    --gradient_accumulation_steps 1 \
+    --max_seq_length 64 \
+    --early_stopping_patience 5
