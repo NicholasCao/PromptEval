@@ -176,22 +176,26 @@ def convert_examples_to_features(examples, max_length, tokenizer):
     features = []
 
     for example in examples:
-        # TODO text_b
-        inputs = tokenizer(example.text_a, padding="max_length", max_length=max_length, truncation=True)
+        if len(example.text_b) > 0:
+            texts = (example.text_a, example.text_b)
+        else:
+            texts = (example.text_a, )
+        inputs = tokenizer(*texts, padding="max_length", max_length=max_length, truncation=True)
         features.append({
             **inputs,
             'labels': example.label
         })
     return features
 
-task_classes = {
-    'sst2': ['negative', 'positive']
+task_num_classes = {
+    'sst2': 2,
+    'rte': 2,
 }
 
-def save_results(results, output_dir):
+def save_results(results, output_dir, file_name="result.json"):
     os.makedirs(output_dir, exist_ok=True)
 
-    json_path = os.path.join(output_dir, "result.json")
+    json_path = os.path.join(output_dir, file_name)
     json_string = json.dumps(results, indent=2, sort_keys=True) + "\n"
     with open(json_path, "w", encoding="utf-8") as f:
         f.write(json_string)
@@ -289,7 +293,7 @@ def main():
 
     model_config = AutoConfig.from_pretrained(config.model_name_or_path)
     tokenizer = AutoTokenizer.from_pretrained(config.model_name_or_path)
-    model_config.num_labels=len(task_classes[config.task])
+    model_config.num_labels=task_num_classes[config.task]
     model = AutoModelForSequenceClassification.from_pretrained(
         config.model_name_or_path,
         config=model_config)
@@ -340,7 +344,7 @@ def main():
     results = trainer.evaluate(test_dataloader)
     logger.info(results)
 
-    save_results(results, config.output_dir)
+    save_results(results, config.output_dir, file_name=f"result_{config.seed}.json")
 
 
 if __name__ == "__main__":

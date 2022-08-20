@@ -28,36 +28,38 @@ logger = logging.getLogger(__name__)
 
 task_manual_templates = {
     'sst2': '{"placeholder": "text_a"} It was {"mask"} .',
+    'rte': '{"placeholder": "text_a"} Question: {"placeholder": "text_b"} ? The answer was {"mask"} .', 
 }
 
 task_mix_templates = {
     'sst2': '{"placeholder": "text_a"} {"soft": "It was"} {"mask"} .',
     'cb': '{"placeholder": "text_a"} {"soft": "Question:"} {"placeholder": "text_b"}? Is it correct? {"mask"} .',
+    'rte': '{"placeholder": "text_a"} {"soft": "Question:"} {"placeholder": "text_b"} ? {"soft": "The"} answer was {"mask"} .',
 }
 
-task_soft_templates = {
-    'sst2': '{"placeholder": "text_a"} It was {"mask"} .',
-}
+# Hybrid Prompt Tuning use the same template text as manual templates
+task_soft_templates = task_manual_templates
 
 task_ptuning_templates = {
     'sst2': '{"placeholder": "text_a"} {"soft"} It was {"mask"} .',
+    'rte': '{"placeholder": "text_a"} Question: {"placeholder": "text_b"} ? {"soft"} Answer: {"mask"} .',
 }
-
+# https://github.com/thunlp/OpenPrompt/tree/main/scripts/FewGLUE
 # https://github.com/THUDM/P-tuning/blob/main/PT-Fewshot/data_utils/task_pvps.py
 
 task_verbalizers = {
-    'sst2': {
-        "negative": "terrible",
-        "positive": "great",
-        # "negative": ["bad", "terrible"],
-        # "positive": ["good", "wonderful", "great"],
-    }
+    'sst2': ['terrible', 'great'],
+    # {
+    #     # "negative": ["bad", "terrible"],
+    #     # "positive": ["good", "wonderful", "great"],
+    # }
+    'rte': ['yes', 'no'], # ['Yes', 'No']
 }
 
-def save_results(results, output_dir):
+def save_results(results, output_dir, file_name="result.json"):
     os.makedirs(output_dir, exist_ok=True)
 
-    json_path = os.path.join(output_dir, "result.json")
+    json_path = os.path.join(output_dir, file_name)
     json_string = json.dumps(results, indent=2, sort_keys=True) + "\n"
     with open(json_path, "w", encoding="utf-8") as f:
         f.write(json_string)
@@ -130,7 +132,7 @@ class PromptEval:
         self.WrapperClass = WrapperClass # TODO
 
 
-        if self.config.task in ['sst2', 'cb']: # test split can not be evaluated
+        if self.config.task in ['sst2', 'rte']: # test split can not be evaluated
             splits = ['train', 'validation']
         else:
             splits = ['train', 'validation', 'test']
@@ -169,7 +171,6 @@ class PromptEval:
         self.loss_func = self.config.loss_func if self.config.loss_func else torch.nn.CrossEntropyLoss()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        # self.dataset, self.processor = load_data(self.config.task, splits=splits)
         self.dataset = load_data(self.config.task, splits=splits)
 
         if self.config.do_train and self.config.shot != -1:
@@ -220,31 +221,27 @@ class PromptEval:
     def get_verbalizer(self, verbalizer: Optional[dict]=None) -> Verbalizer:
         method, task = self.config.method, self.config.task
 
-        task_classes = {
-            'sst2': ['negative', 'positive']
+        # task_classes = {
+        #     'sst2': ['negative', 'positive']
+        # }
+        task_num_classes = {
+            'sst2': 2,
+            'rte': 2,
         }
 
         if method in ['manual', 'prompt_tuning', 'p_tuning']:
             verbalizer = ManualVerbalizer(
                 tokenizer=self.tokenizer,
-                classes=task_classes[self.config.task],
+                num_classes=task_num_classes[self.config.task],
                 label_words=verbalizer if verbalizer is not None else task_verbalizers[task])
         elif method == 'warp':
             verbalizer = SoftVerbalizer(
                 tokenizer=self.tokenizer,
                 model=self.plm,
-                classes=task_classes[self.config.task],
+                num_classes=task_num_classes[self.config.task],
                 label_words=verbalizer if verbalizer is not None else task_verbalizers[task])
         else:
             raise NotImplementedError
-
-        # if method not in Verbalizers:
-        #     raise NotImplementedError
-
-        # verbalizer = Verbalizers[method](
-        #     tokenizer=self.tokenizer,
-        #     classes=['negative', 'positive'],
-        #     label_words=verbalizer if verbalizer is not None else task_verbalizers[task])
 
         return verbalizer
 
@@ -273,7 +270,7 @@ class PromptEval:
             logger.info(results)
             results_to_save["Test Results"] = results
 
-        save_results(results_to_save, self.config.output_dir)
+        save_results(results_to_save, self.config.output_dir, file_name=f"result_{self.config.seed}.json")
 
         return results
 

@@ -2,8 +2,8 @@ python cli.py \
     --method prompt_tuning \
     --model roberta \
     --model_name_or_path roberta-large \
-    --seed 42 \
-    --task sst2 \
+    --seed 10 \
+    --task rte \
     --do_train True \
     --zero_shot True \
     --tune_plm False \
@@ -12,7 +12,7 @@ python cli.py \
     --output_dir result \
     --optimizer adamw \
     --log_steps 20 \
-    --eval_steps 20 \
+    --eval_steps 40 \
     --warmup_steps 50 \
     --max_steps 800 \
     --prompt_lr 1e-2 \
