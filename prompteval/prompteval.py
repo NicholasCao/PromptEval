@@ -16,8 +16,8 @@ from openprompt.prompts import ManualTemplate, MixedTemplate, SoftTemplate, Ptun
 from openprompt.data_utils.data_sampler import FewShotSampler
 from openprompt.utils.reproduciblity import set_seed
 
-from data import load_data
-from trainer import PromptTrainer
+from .data import load_data
+from .trainer import PromptTrainer
 
 logging.basicConfig(
     format="[%(levelname)s|%(name)s] %(asctime)s >> %(message)s",
@@ -28,13 +28,16 @@ logger = logging.getLogger(__name__)
 
 task_manual_templates = {
     'sst2': '{"placeholder": "text_a"} It was {"mask"} .',
-    'rte': '{"placeholder": "text_a"} Question: {"placeholder": "text_b"} ? The answer was {"mask"} .', 
+    'rte': '{"placeholder": "text_a"} Question: {"placeholder": "text_b"} ? The answer was {"mask"} .',
+    'agnews': '{"placeholder": "text_a"} News: {"mask"} .',
+    # 'agnews': '{"placeholder": "text_a"} The news topic is {"mask"} .',
 }
 
 task_mix_templates = {
     'sst2': '{"placeholder": "text_a"} {"soft": "It was"} {"mask"} .',
-    'cb': '{"placeholder": "text_a"} {"soft": "Question:"} {"placeholder": "text_b"}? Is it correct? {"mask"} .',
+    # 'cb': '{"placeholder": "text_a"} {"soft": "Question:"} {"placeholder": "text_b"}? Is it correct? {"mask"} .',
     'rte': '{"placeholder": "text_a"} {"soft": "Question:"} {"placeholder": "text_b"} ? {"soft": "The"} answer was {"mask"} .',
+    'agnews': '{"placeholder": "text_a"} {"soft": "New :"} {"mask"} .',
 }
 
 # Hybrid Prompt Tuning use the same template text as manual templates
@@ -43,6 +46,7 @@ task_soft_templates = task_manual_templates
 task_ptuning_templates = {
     'sst2': '{"placeholder": "text_a"} {"soft"} It was {"mask"} .',
     'rte': '{"placeholder": "text_a"} Question: {"placeholder": "text_b"} ? {"soft"} Answer: {"mask"} .',
+    'agnews': '{"placeholder": "text_a"} {"soft"} News: {"mask"} .',
 }
 # https://github.com/thunlp/OpenPrompt/tree/main/scripts/FewGLUE
 # https://github.com/THUDM/P-tuning/blob/main/PT-Fewshot/data_utils/task_pvps.py
@@ -54,6 +58,14 @@ task_verbalizers = {
     #     # "positive": ["good", "wonderful", "great"],
     # }
     'rte': ['yes', 'no'], # ['Yes', 'No']
+    'agnews': ['World', 'Sports', 'Business', 'Tech'],
+    # 'agnews': ['world', 'sports', 'business', 'tech']
+}
+
+task_num_classes = {
+    'sst2': 2,
+    'rte': 2,
+    'agnews': 4
 }
 
 def save_results(results, output_dir, file_name="result.json"):
@@ -74,7 +86,7 @@ class PromptEvalConfig:
     do_train: bool = True
     zero_shot: bool = True
     tune_plm: bool = False
-    shot: int = 16 # -1 means full data
+    shot: int = 16
     metric_for_best_model: str = 'acc'
 
     loss_func: Optional[Callable] = None
@@ -131,15 +143,6 @@ class PromptEval:
         self.model_config = model_config
         self.WrapperClass = WrapperClass # TODO
 
-
-        if self.config.task in ['sst2', 'rte']: # test split can not be evaluated
-            splits = ['train', 'validation']
-        else:
-            splits = ['train', 'validation', 'test']
-
-        if not self.config.do_train:
-            splits = splits[-1:]
-
         if template is not None:
             if isinstance(template, Template):
                 self.template = template
@@ -171,9 +174,18 @@ class PromptEval:
         self.loss_func = self.config.loss_func if self.config.loss_func else torch.nn.CrossEntropyLoss()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+        if self.config.task in ['sst2', 'rte']: # test split can not be evaluated
+            splits = ['train', 'validation']
+        else:
+            splits = ['train', 'test']
+
+        if not self.config.do_train:
+            splits = splits[-1:]
+        
+        self.splits = splits
         self.dataset = load_data(self.config.task, splits=splits)
 
-        if self.config.do_train and self.config.shot != -1:
+        if self.config.do_train:
             # true_few_shot_data
             sampler = FewShotSampler(num_examples_per_label=self.config.shot, also_sample_dev=True)
             self.dataset['train'], self.dataset['dev'] = sampler(self.dataset['train'], seed=self.config.seed)
@@ -220,14 +232,6 @@ class PromptEval:
     
     def get_verbalizer(self, verbalizer: Optional[dict]=None) -> Verbalizer:
         method, task = self.config.method, self.config.task
-
-        # task_classes = {
-        #     'sst2': ['negative', 'positive']
-        # }
-        task_num_classes = {
-            'sst2': 2,
-            'rte': 2,
-        }
 
         if method in ['manual', 'prompt_tuning', 'p_tuning']:
             verbalizer = ManualVerbalizer(
@@ -276,22 +280,20 @@ class PromptEval:
 
     def create_dataloader(self, dataset) -> None:
         if self.config.do_train:
-            self.train_dataloader = PromptDataLoader(dataset=dataset["train"], template=self.template,
+            self.train_dataloader = PromptDataLoader(dataset=dataset['train'], template=self.template,
                 tokenizer=self.tokenizer, tokenizer_wrapper_class=self.WrapperClass, 
                 max_seq_length=self.config.max_seq_length, decoder_max_length=3, 
                 batch_size=self.config.train_batch_size, shuffle=True, teacher_forcing=False, 
                 predict_eos_token=False, truncate_method="tail")
 
-            dev_datasets = dataset.get('dev', dataset["validation"])
-            if len(dev_datasets) == 0:
-                dev_datasets = dataset["validation"]
-            self.dev_dataloader = PromptDataLoader(dataset=dev_datasets, 
+            self.dev_dataloader = PromptDataLoader(dataset=dataset['dev'], 
                 template=self.template, tokenizer=self.tokenizer, tokenizer_wrapper_class=self.WrapperClass, 
                 max_seq_length=self.config.max_seq_length, decoder_max_length=3, 
                 batch_size=self.config.eval_batch_size, shuffle=False, teacher_forcing=False, 
                 predict_eos_token=False, truncate_method="tail")
 
-        self.test_dataloader = PromptDataLoader(dataset=dataset.get('test', dataset["validation"]), 
+        test_dataset = dataset[self.splits[-1]]
+        self.test_dataloader = PromptDataLoader(dataset=test_dataset, 
             template=self.template, tokenizer=self.tokenizer, tokenizer_wrapper_class=self.WrapperClass, 
             max_seq_length=self.config.max_seq_length, decoder_max_length=3, 
             batch_size=self.config.eval_batch_size, shuffle=False, teacher_forcing=False, 

@@ -1,7 +1,13 @@
 # PromptEval
-A python tool for evaluating the quality of prompt learning.
+A python tool for evaluating the quality of few-shot prompt learning.
 
-# TODO
-- [ ] dataCollator (pad the samples dynamically when batching to the maximum length in the batch)
-- [ ] other method
-- [ ] other datasets
+
+# Usage
+```bash
+bash scripts/prompt_tuning.sh -t sst2
+```
+
+# Supported Tasks
+- sst2
+- rte
+- agnew

@@ -1,6 +1,5 @@
 from transformers import HfArgumentParser
 
-from prompteval import PromptEvalConfig
 import dataclasses
 import json
 import os
@@ -15,8 +14,6 @@ import numpy as np
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from data import load_data
-
 from collections import defaultdict, namedtuple
 from typing import *
 
@@ -24,7 +21,10 @@ import numpy as np
 from torch.utils.data import Dataset
 from openprompt.utils.logging import logger
 from typing import Union
-from trainer import PromptTrainer
+
+from prompteval import PromptEvalConfig
+from prompteval.data import load_data
+from prompteval.trainer import PromptTrainer
 
 
 class FewShotSampler(object):
@@ -190,6 +190,7 @@ def convert_examples_to_features(examples, max_length, tokenizer):
 task_num_classes = {
     'sst2': 2,
     'rte': 2,
+    'agnews': 4
 }
 
 def save_results(results, output_dir, file_name="result.json"):
@@ -235,7 +236,8 @@ class FineTuneTrainer(PromptTrainer):
             for key, input in zip(self.input_keys, inputs):
                 convert_inputs[key] = input.to(self.device)
 
-            outputs = self.model(**convert_inputs)
+            with torch.no_grad():
+                outputs = self.model(**convert_inputs)
             logits = outputs.logits
             labels = convert_inputs['labels']
 
@@ -243,7 +245,7 @@ class FineTuneTrainer(PromptTrainer):
             all_preds.extend(torch.argmax(logits, dim=-1).cpu().tolist())
 
         acc = accuracy_score(all_labels, all_preds)
-        f1 = f1_score(all_labels, all_preds)
+        f1 = f1_score(all_labels, all_preds, average='macro' if self.config.task in ['agnews'] else 'binary')
         metrics = {"eval_acc": acc, "eval_f1": f1} 
 
         if self.is_training:
@@ -299,14 +301,18 @@ def main():
         config=model_config)
 
     # papre data
-    dataset = load_data(config.task, splits=['train', 'validation'])
+    if config.task in ['sst2', 'rte']: # test split can not be evaluated
+        splits = ['train', 'validation']
+    else:
+        splits = ['train', 'test']
+    dataset = load_data(config.task, splits)
 
     sampler = FewShotSampler(num_examples_per_label=config.shot, also_sample_dev=True)
     dataset['train'], dataset['dev'] = sampler(dataset['train'], seed=config.seed)
     
     train_features = convert_examples_to_features(dataset['train'], config.max_seq_length, tokenizer)
     dev_features = convert_examples_to_features(dataset['dev'], config.max_seq_length, tokenizer)
-    test_features = convert_examples_to_features(dataset['validation'], config.max_seq_length, tokenizer)
+    test_features = convert_examples_to_features(dataset[splits[-1]], config.max_seq_length, tokenizer)
 
     input_keys = []
     train_tensor_features = []

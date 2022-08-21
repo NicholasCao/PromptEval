@@ -93,14 +93,15 @@ class PromptTrainer:
 
         for step, inputs in enumerate(eval_dataloader):
             inputs = inputs.to(self.device)
-            logits = self.model(inputs)
+            with torch.no_grad():
+                logits = self.model(inputs)
             labels = inputs['label']
 
             all_labels.extend(labels.cpu().tolist())
             all_preds.extend(torch.argmax(logits, dim=-1).cpu().tolist())
 
         acc = accuracy_score(all_labels, all_preds)
-        f1 = f1_score(all_labels, all_preds)
+        f1 = f1_score(all_labels, all_preds, average='macro' if self.config.task in ['agnews'] else 'binary')
         metrics = {"eval_acc": acc, "eval_f1": f1} 
 
         if self.is_training:

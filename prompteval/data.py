@@ -11,6 +11,7 @@ task_to_keys = {
     "sst2": ("sentence", None),
     "stsb": ("sentence1", "sentence2"),
     "wnli": ("sentence1", "sentence2"),
+    "agnews": ("text", None),
 }
 
 # add '.' at the end of text
@@ -25,6 +26,8 @@ def get_raw_dataset(task, split):
         return load_dataset('glue', 'sst2', split=split)
     elif task == 'rte':
         return load_dataset('glue', 'rte', split=split)
+    elif task == 'agnews':
+        return load_dataset('ag_news', 'default', split=split)
     else:
         raise NotImplementedError()
 
@@ -39,7 +42,7 @@ def load_data(task, splits=['train', 'validation', 'test']):
         raw_dataset = get_raw_dataset(task, split=split)
         for example in raw_dataset:
             input_example = InputExample(
-                guid=example['idx'],
+                # guid=example['idx'],
                 text_a=check_text(example[sentence1_key]),
                 text_b=check_text(example[sentence2_key]) if sentence2_key else '',
                 label=int(example['label']))
