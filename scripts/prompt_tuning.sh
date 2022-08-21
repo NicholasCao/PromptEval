@@ -26,6 +26,7 @@ for seed in 10 42 100
 do
     python cli.py \
         --method prompt_tuning \
+        --pt_init_method vocab_init \
         --model roberta \
         --model_name_or_path roberta-large \
         --seed $seed \

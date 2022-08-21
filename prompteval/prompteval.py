@@ -79,6 +79,7 @@ def save_results(results, output_dir, file_name="result.json"):
 @dataclasses.dataclass
 class PromptEvalConfig:
     method: str = 'prompt_tuning'
+    pt_init_method: str = 'vocab_init' # prompt tuning init method
     model: str = 'bert'
     model_name_or_path: str = 'bert-base-uncased'
     seed: int = 42
@@ -141,7 +142,7 @@ class PromptEval:
         self.plm = plm
         self.tokenizer = tokenizer
         self.model_config = model_config
-        self.WrapperClass = WrapperClass # TODO
+        self.WrapperClass = WrapperClass
 
         if template is not None:
             if isinstance(template, Template):
@@ -217,8 +218,33 @@ class PromptEval:
                 model=self.plm,
                 tokenizer=self.tokenizer,
                 num_tokens=20,
-                initialize_from_vocab=True,
+                initialize_from_vocab=self.config.pt_init_method == 'vocab_init',
                 text=template_text if template_text is not None else task_soft_templates[task])
+            if self.config.pt_init_method in ['vocab_init', 'uniform']:
+                # handled by openprompt
+                pass
+            elif self.config.pt_init_method == 'normal':
+                raw_embedding = template.raw_embedding
+                soft_embeds = torch.FloatTensor(20, raw_embedding.weight.size(1)).normal_(0, 0.02)
+                template.soft_embeds = torch.nn.Parameter(soft_embeds, requires_grad=True)
+            elif self.config.pt_init_method == 'normal_by_embeddings':
+                raw_embedding = template.raw_embedding
+                mean = raw_embedding.weight.detach().mean()
+                std = raw_embedding.weight.detach().std()
+                soft_embeds = torch.FloatTensor(20, raw_embedding.weight.size(1)).normal_(mean, std)
+                template.soft_embeds = torch.nn.Parameter(soft_embeds, requires_grad=True)
+            elif self.config.pt_init_method == 'normal_by_embeddings_plus':
+                raw_embedding = template.raw_embedding
+                mean = raw_embedding.weight.detach().mean(dim=-1)
+                std = raw_embedding.weight.detach().std(dim=-1)
+                soft_embeds = []
+                for i in range(raw_embedding.weight.size(1)):
+                    soft_embeds.append(torch.FloatTensor(20).normal_(mean[i], std[i]))
+                soft_embeds = torch.stack(soft_embeds, dim=1)
+                template.soft_embeds = torch.nn.Parameter(soft_embeds, requires_grad=True)
+            else:
+                raise NotImplementedError()
+
         elif method == 'p_tuning':
             template = PtuningTemplate(
                 model=self.plm,
@@ -274,7 +300,9 @@ class PromptEval:
             logger.info(results)
             results_to_save["Test Results"] = results
 
-        save_results(results_to_save, self.config.output_dir, file_name=f"result_{self.config.seed}.json")
+        file_name = f"result_{self.config.seed}.json" if self.config.pt_init_method == 'vocab_init' \
+            else f"result_{self.config.pt_init_method}_{self.config.seed}.json"
+        save_results(results_to_save, self.config.output_dir, file_name=file_name)
 
         return results
 
