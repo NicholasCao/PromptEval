@@ -20,6 +20,9 @@ then
 elif [ $task == "mrpc" ]
 then 
     max_seq_length=200
+elif [ $task == "yelp" ]
+then 
+    max_seq_length=150
 else
     printf "Unkonwn task '${task}' \n" 
     exit

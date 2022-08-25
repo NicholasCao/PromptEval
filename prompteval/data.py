@@ -12,6 +12,7 @@ task_to_keys = {
     "stsb": ("sentence1", "sentence2"),
     "wnli": ("sentence1", "sentence2"),
     "agnews": ("text", None),
+    "yelp": ("text", None),
 }
 
 # add '.' at the end of text
@@ -30,6 +31,8 @@ def get_raw_dataset(task, split):
         return load_dataset('ag_news', 'default', split=split)
     elif task == 'mrpc':
         return load_dataset('glue', 'mrpc', split=split)
+    elif task == 'yelp':
+        return load_dataset('yelp_polarity', 'plain_text', split=split)
     else:
         raise NotImplementedError()
 

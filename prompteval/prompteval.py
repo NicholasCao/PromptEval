@@ -29,8 +29,9 @@ logger = logging.getLogger(__name__)
 task_manual_templates = {
     'sst2': '{"placeholder": "text_a"} It was {"mask"} .',
     'rte': '{"placeholder": "text_a"} Question: {"placeholder": "text_b"} ? The answer was {"mask"} .',
-    'agnews': '{"placeholder": "text_a"} News: {"mask"} .',
+    'agnews': '{"mask"} News: \n {"placeholder": "text_a"}',
     'mrpc': '{"placeholder": "text_a"} ? {"mask"} , {"placeholder": "text_b"}',
+    'yelp': '{"placeholder": "text_a"} It is {"mask"} .',
     # 'agnews': '{"placeholder": "text_a"} The news topic is {"mask"} .',
 }
 
@@ -59,8 +60,13 @@ task_verbalizers = {
     #     # "positive": ["good", "wonderful", "great"],
     # }
     'rte': ['yes', 'no'], # ['Yes', 'No']
-    'agnews': ['World', 'Sports', 'Business', 'Tech'],
+    'agnews': [
+        ['International'],
+        ['Sports'],
+        ['Business', 'Economic'],
+        ['Tech', 'Technology', 'Science', 'IT']],
     'mrpc': ['No', 'Yes'],
+    'yelp': ['terrible', 'great'],
     # 'agnews': ['world', 'sports', 'business', 'tech']
 }
 
@@ -326,7 +332,7 @@ class PromptEval:
                 batch_size=self.config.eval_batch_size, shuffle=False, teacher_forcing=False, 
                 predict_eos_token=False, truncate_method="tail")
 
-        test_dataset = dataset[self.splits[-1]]
+        test_dataset = dataset[self.splits[-1]][:2000] # max test num 2000
         self.test_dataloader = PromptDataLoader(dataset=test_dataset, 
             template=self.template, tokenizer=self.tokenizer, tokenizer_wrapper_class=self.WrapperClass, 
             max_seq_length=self.config.max_seq_length, decoder_max_length=3, 
