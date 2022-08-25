@@ -181,7 +181,7 @@ class PromptEval:
         self.loss_func = self.config.loss_func if self.config.loss_func else torch.nn.CrossEntropyLoss()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        if self.config.task in ['sst2', 'rte']: # test split can not be evaluated
+        if self.config.task in ['sst2', 'rte', 'mrpc']: # test split can not be evaluated
             splits = ['train', 'validation']
         else:
             splits = ['train', 'test']
