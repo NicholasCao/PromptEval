@@ -28,6 +28,8 @@ def get_raw_dataset(task, split):
         return load_dataset('glue', 'rte', split=split)
     elif task == 'agnews':
         return load_dataset('ag_news', 'default', split=split)
+    elif task == 'mrpc':
+        return load_dataset('glue', 'mrpc', split=split)
     else:
         raise NotImplementedError()
 

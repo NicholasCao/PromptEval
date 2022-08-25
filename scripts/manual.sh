@@ -17,6 +17,9 @@ then
 elif [ $task == "agnews" ]
 then 
     max_seq_length=128
+elif [ $task == "mrpc" ]
+then 
+    max_seq_length=200
 else
     printf "Unkonwn task '${task}' \n" 
     exit

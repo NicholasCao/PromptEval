@@ -30,6 +30,7 @@ task_manual_templates = {
     'sst2': '{"placeholder": "text_a"} It was {"mask"} .',
     'rte': '{"placeholder": "text_a"} Question: {"placeholder": "text_b"} ? The answer was {"mask"} .',
     'agnews': '{"placeholder": "text_a"} News: {"mask"} .',
+    'mrpc': '{"placeholder": "text_a"} ? {"mask"} , {"placeholder": "text_b"}',
     # 'agnews': '{"placeholder": "text_a"} The news topic is {"mask"} .',
 }
 
@@ -59,13 +60,18 @@ task_verbalizers = {
     # }
     'rte': ['yes', 'no'], # ['Yes', 'No']
     'agnews': ['World', 'Sports', 'Business', 'Tech'],
+    'mrpc': ['No', 'Yes'],
     # 'agnews': ['world', 'sports', 'business', 'tech']
 }
 
 task_num_classes = {
     'sst2': 2,
     'rte': 2,
-    'agnews': 4
+    'agnews': 4,
+    'mrpc': 2,
+    'snli': 3,
+    'trec': 6,
+    'yelp': 2
 }
 
 def save_results(results, output_dir, file_name="result.json"):
