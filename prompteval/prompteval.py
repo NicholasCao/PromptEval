@@ -33,6 +33,7 @@ task_manual_templates = {
     'mrpc': '{"placeholder": "text_a"} ? {"mask"} , {"placeholder": "text_b"}',
     'yelp': '{"placeholder": "text_a"} It is {"mask"} .',
     # 'agnews': '{"placeholder": "text_a"} The news topic is {"mask"} .',
+    'trec': '{"mask"} question: {"placeholder": "text_a"}',
 }
 
 task_mix_templates = {
@@ -67,6 +68,20 @@ task_verbalizers = {
         ['Tech', 'Technology', 'Science', 'IT']],
     'mrpc': ['No', 'Yes'],
     'yelp': ['terrible', 'great'],
+    'trec': [
+        ["description"],
+        ["entity"], # animal # try max
+        ["abbreviation"],
+        ["human"],
+        ["numeric"],
+        ["location"]
+    ]
+        #     0: "description",
+        #     1: "entity",
+        #     2: "abbreviation",
+        #     3: "human",
+        #     4: "numeric",
+        #     5: "location"]
     # 'agnews': ['world', 'sports', 'business', 'tech']
 }
 

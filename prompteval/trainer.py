@@ -101,7 +101,7 @@ class PromptTrainer:
             all_preds.extend(torch.argmax(logits, dim=-1).cpu().tolist())
 
         acc = accuracy_score(all_labels, all_preds)
-        f1 = f1_score(all_labels, all_preds, average='macro' if self.config.task in ['agnews'] else 'binary')
+        f1 = f1_score(all_labels, all_preds, average='macro' if self.config.task in ['agnews', 'trec'] else 'binary')
         metrics = {"eval_acc": acc, "eval_f1": f1} 
 
         if self.is_training:

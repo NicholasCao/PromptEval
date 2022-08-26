@@ -13,6 +13,7 @@ task_to_keys = {
     "wnli": ("sentence1", "sentence2"),
     "agnews": ("text", None),
     "yelp": ("text", None),
+    "trec": ("text", None)
 }
 
 # add '.' at the end of text
@@ -33,6 +34,8 @@ def get_raw_dataset(task, split):
         return load_dataset('glue', 'mrpc', split=split)
     elif task == 'yelp':
         return load_dataset('yelp_polarity', 'plain_text', split=split)
+    elif task == 'trec':
+        return load_dataset('trec', 'default', split=split)
     else:
         raise NotImplementedError()
 
@@ -50,7 +53,8 @@ def load_data(task, splits=['train', 'validation', 'test']):
                 # guid=example['idx'],
                 text_a=check_text(example[sentence1_key]),
                 text_b=check_text(example[sentence2_key]) if sentence2_key else '',
-                label=int(example['label']))
+                label=int(example['label-coarse'] if task == 'trec' else example['label'])
+            )
             dataset[split].append(input_example)
 
     return dataset
