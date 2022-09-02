@@ -30,10 +30,15 @@ task_manual_templates = {
     'sst2': '{"placeholder": "text_a"} It was {"mask"} .',
     'rte': '{"placeholder": "text_a"} Question: {"placeholder": "text_b"} ? The answer was {"mask"} .',
     'agnews': '{"mask"} News: \n {"placeholder": "text_a"}',
-    'mrpc': '{"placeholder": "text_a"} ? {"mask"} , {"placeholder": "text_b"}',
-    'yelp': '{"placeholder": "text_a"} It is {"mask"} .',
+    'mrpc': '{"placeholder": "text_a"} ? {"mask"} , {"placeholder": "text_b"}',#0.678921568627451
+
     # 'agnews': '{"placeholder": "text_a"} The news topic is {"mask"} .',
-    'trec': '{"mask"} question: {"placeholder": "text_a"}',
+    # 'trec': '{"mask"} question: {"placeholder": "text_a"}',
+    # 'trec': 'Q: {"mask"} : {"placeholder": "text_a"}', 0.4
+    # 'trec': '{"placeholder": "text_a" } Answer: {"mask"} .', 0.414
+    # 'trec': 'Question: {"mask"} : {"placeholder": "text_a"}', 0.402
+    'trec': '{"placeholder": "text_a" } A: {"mask"} .', #0.478 use 'number' 0.546
+    # 'trec': '{"placeholder": "text_a" } All {"mask"} .', 0.458
 }
 
 task_mix_templates = {
@@ -66,14 +71,15 @@ task_verbalizers = {
         ['Sports'],
         ['Business', 'Economic'],
         ['Tech', 'Technology', 'Science', 'IT']],
-    'mrpc': ['No', 'Yes'],
+    # 'mrpc': ['No', 'Yes'],
+    'mrpc': ['Moreover', 'Instead'], # 0.6936
     'yelp': ['terrible', 'great'],
     'trec': [
         ["description"],
-        ["entity"], # animal # try max
-        ["abbreviation"],
+        ["entity"],
+        ["abbreviation"] , #["abbreviation"],
         ["human"],
-        ["numeric"],
+        ["number"],
         ["location"]
     ]
         #     0: "description",
